@@ -1,0 +1,20 @@
+{
+  "version": 1, "author": "kelompok_4", "editor": "wokwi",
+  "parts": [
+    { "type": "board-esp32-devkit-c-v4", "id": "esp", "top": 0, "left": 0, "attrs": {} },
+    { "type": "wokwi-hc-sr04", "id": "ultrasonic1", "top": -120, "left": 150, "attrs": { "distance": "20" } },
+    { "type": "wokwi-servo", "id": "servo1", "top": 60, "left": 200, "attrs": {} }
+  ],
+  "connections": [
+    [ "esp:TX", "$serialMonitor:RX", "", [] ],
+    [ "esp:RX", "$serialMonitor:TX", "", [] ],
+    [ "ultrasonic1:VCC", "esp:5V", "red", [ "v0" ] ],
+    [ "ultrasonic1:GND", "esp:GND.1", "black", [ "v0" ] ],
+    [ "ultrasonic1:TRIG", "esp:5", "green", [ "v0" ] ],
+    [ "ultrasonic1:ECHO", "esp:18", "blue", [ "v0" ] ],
+    [ "servo1:GND", "esp:GND.1", "black", [ "h0" ] ],
+    [ "servo1:V+", "esp:5V", "red", [ "h0" ] ],
+    [ "servo1:PWM", "esp:13", "orange", [ "h0" ] ]
+  ],
+  "dependencies": {}
+}
