@@ -5,7 +5,7 @@
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
 
-#define KELOMPOK "kelompok_4"          // harus sama di edge2 & dashboard
+#define KELOMPOK "kelompok_4"           
 const char* WIFI_SSID = "Wokwi-GUEST"; // WiFi bawaan Wokwi
 const char* WIFI_PASS = "";
 const char* MQTT_HOST = "broker.hivemq.com";

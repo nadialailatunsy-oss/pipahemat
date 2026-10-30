@@ -5,7 +5,7 @@
 #include <ArduinoJson.h>
 #include <ESP32Servo.h>
 
-#define KELOMPOK "kelompok_4"          // harus sama dengan edge1 & dashboard
+#define KELOMPOK "kelompok_4"          
 const char* WIFI_SSID = "Wokwi-GUEST";
 const char* WIFI_PASS = "";
 const char* MQTT_HOST = "broker.hivemq.com";
