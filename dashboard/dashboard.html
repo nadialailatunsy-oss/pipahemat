@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PipaHemat Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/mqtt@5.10.1/dist/mqtt.min.js"></script>
+<style>
+:root{--bg:#f5f7fa;--card:#fff;--tx:#1c2430;--mut:#6b7686;--bd:#e1e6ee;--ok:#1b9e5a;--warn:#d98a00;--bad:#d6322f;--idle:#8a94a3}
+@media (prefers-color-scheme:dark){:root{--bg:#10151c;--card:#1a212b;--tx:#e8edf3;--mut:#93a0b2;--bd:#2a3340}}
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,sans-serif;background:var(--bg);color:var(--tx);padding:14px;max-width:520px;margin:auto}
+h1{font-size:20px;margin:4px 0 12px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:14px;margin-bottom:12px}
+.row{display:flex;gap:8px;align-items:center}
+input{flex:1;padding:9px;border-radius:8px;border:1px solid var(--bd);background:var(--bg);color:var(--tx)}
+button{padding:10px 14px;border:0;border-radius:8px;font-weight:600;cursor:pointer;background:#2f6fed;color:#fff}
+button.bad{background:var(--bad)} button.ok{background:var(--ok)} button.gray{background:var(--idle)}
+#pill{font-size:12px;color:var(--mut);margin-top:8px}
+#status{font-size:30px;font-weight:800;text-align:center;padding:18px;border-radius:12px;color:#fff;background:var(--idle)}
+#status.AMAN{background:var(--ok)} #status.WASPADA{background:var(--warn)} #status.BOCOR{background:var(--bad)}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.m{border:1px solid var(--bd);border-radius:10px;padding:10px}
+.m small{color:var(--mut);display:block} .m b{font-size:22px}
+.bar{height:10px;background:var(--bd);border-radius:6px;overflow:hidden;margin-top:6px}
+#fill{height:100%;width:0;background:#2f6fed;transition:width .4s}
+#log{font-size:13px;color:var(--mut);max-height:140px;overflow:auto;white-space:pre-line}
+.btns{display:flex;gap:8px;flex-wrap:wrap}
+</style>
+</head>
+<body>
+<h1>PipaHemat</h1>
+
+<div class="card">
+  <div class="row"><input id="g" placeholder="kelompok_4"><button id="conn">Hubungkan</button></div>
+  <div id="pill">Belum terhubung</div>
+</div>
+
+<div class="card"><div id="status">-</div></div>
+
+<div class="card grid">
+  <div class="m"><small>Debit pipa (L/menit)</small><b id="flow">-</b></div>
+  <div class="m"><small>Turun level (L/menit)</small><b id="drop">-</b></div>
+  <div class="m"><small>Level tandon (L)</small><b id="lvl">-</b><div class="bar"><div id="fill"></div></div></div>
+  <div class="m"><small>Estimasi air terbuang (L)</small><b id="wasted">-</b></div>
+  <div class="m"><small>Selisih / bocor (L/menit)</small><b id="leak">-</b></div>
+  <div class="m"><small>Katup</small><b id="valve">-</b></div>
+</div>
+
+<div class="card">
+  <div class="btns">
+    <button class="bad" id="bTutup">Tutup Katup</button>
+    <button class="ok" id="bBuka">Buka Katup / Reset BOCOR</button>
+    <button class="gray" id="bReset">Reset hitungan</button>
+  </div>
+  <p style="font-size:13px;color:var(--mut);margin:12px 0 6px">Demo (bocor virtual di Edge 2)</p>
+  <div class="btns">
+    <button class="gray" id="bSim">Simulasi bocor 3 L/menit</button>
+    <button class="gray" id="bSimOff">Hentikan simulasi</button>
+  </div>
+</div>
+
+<div class="card"><b style="font-size:14px">Log alert</b><div id="log">-</div></div>
+
+<script>
+const $ = id => document.getElementById(id);
+const BROKER = 'wss://broker.hivemq.com:8884/mqtt';
+let client = null, base = '';
+
+const qs = new URLSearchParams(location.search).get('g');
+let saved = ''; try { saved = localStorage.getItem('pipahemat_g') || ''; } catch (e) {}
+$('g').value = qs || saved || 'kelompok_4';
+
+function pub(msg){ if (client && client.connected) client.publish(base + '/cmd/katup', msg); }
+function setPill(t){ $('pill').textContent = t; }
+
+$('conn').onclick = () => {
+  if (client) client.end(true);
+  base = 'pipahemat/' + $('g').value.trim();
+  try { localStorage.setItem('pipahemat_g', $('g').value.trim()); } catch (e) {}
+  if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission();
+  setPill('Menghubungkan...');
+  client = mqtt.connect(BROKER, { clientId: 'pipahemat-hp-' + Math.random().toString(16).slice(2, 8), reconnectPeriod: 3000 });
+  client.on('connect', () => {
+    setPill('Terhubung ke ' + base);
+    client.subscribe(base + '/edge/+/telemetry');
+    client.subscribe(base + '/alerts');
+  });
+  client.on('close', () => setPill('Terputus, mencoba lagi...'));
+  client.on('message', (topic, payload) => {
+    let d; try { d = JSON.parse(payload.toString()); } catch (e) { return; }
+    if (topic.endsWith('/edge/edge1/telemetry')) $('flow').textContent = d.flow_lpm.toFixed(1);
+    else if (topic.endsWith('/edge/edge2/telemetry')) {
+      $('drop').textContent = d.drop_lpm.toFixed(1);
+      $('lvl').textContent = d.level_l.toFixed(1);
+      $('fill').style.width = Math.min(100, d.level_l / 40 * 100) + '%';
+      $('wasted').textContent = d.wasted_l.toFixed(1);
+      $('leak').textContent = d.leak_lpm.toFixed(1);
+      $('valve').textContent = d.valve;
+      $('status').textContent = d.status.replace('_', ' ');
+      $('status').className = d.status;
+    } else if (topic.endsWith('/alerts')) {
+      const t = new Date().toLocaleTimeString('id-ID');
+      const line = t + '  BOCOR terdeteksi, selisih ' + d.leak_lpm + ' L/menit, terbuang ' + d.wasted_l + ' L';
+      $('log').textContent = line + '\n' + ($('log').textContent === '-' ? '' : $('log').textContent);
+      if (navigator.vibrate) navigator.vibrate([300, 100, 300]);
+      if ('Notification' in window && Notification.permission === 'granted') new Notification('PipaHemat: BOCOR!', { body: line });
+    }
+  });
+};
+$('bTutup').onclick = () => pub('TUTUP');
+$('bBuka').onclick = () => pub('BUKA');
+$('bReset').onclick = () => pub('RESET');
+$('bSim').onclick = () => pub('SIM:3');
+$('bSimOff').onclick = () => pub('SIM:0');
+</script>
+</body>
+</html>
