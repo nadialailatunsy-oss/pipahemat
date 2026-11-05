@@ -5,7 +5,7 @@
 #include <ArduinoJson.h>
 #include <ESP32Servo.h>
 
-#define KELOMPOK "kelompok_4"          
+#define KELOMPOK "kelompok_4"
 const char* WIFI_SSID = "Wokwi-GUEST";
 const char* WIFI_PASS = "";
 const char* MQTT_HOST = "broker.hivemq.com";
@@ -23,7 +23,13 @@ const int SERVO_OPEN = 0, SERVO_CLOSED = 90;
 
 const float TANK_H_CM = 100.0;         // jarak sensor ke dasar tandon
 const float AREA_CM2 = 400.0;          // 1 cm = 0.4 liter
-const float LEAK_THRESHOLD_LPM = 1.5;  // ambang selisih
+
+// Batas hasil training Decision Tree (Colab), menggantikan ambang manual 1.5
+const float AI_THRESHOLD_LPM = 1.425;
+
+// Keputusan model (AMAN / CURIGA)
+bool aiCuriga(float selisih) { return selisih > AI_THRESHOLD_LPM; }
+
 const uint32_t GRACE_MS = 15000;       // toleransi lonjakan sesaat
 const int WINDOW_S = 20;               // jendela laju turun level (detik)
 
@@ -86,7 +92,7 @@ float avgFlow() {                                // debit rata-rata selama jende
   return s / (n - 1);
 }
 
-// ---------- ALGORITMA: neraca air ----------
+// ---------- ALGORITMA: neraca air + keputusan AI ----------
 void publishAlert() {
   JsonDocument d;
   d["status"] = "BOCOR"; d["leak_lpm"] = r2(leakLpm); d["wasted_l"] = r2(wastedL);
@@ -101,12 +107,12 @@ void evaluate() {
   if (!flowOk || n < WINDOW_S) { status = "MENUNGGU_DATA"; return; }
 
   leakLpm = dropLpm - avgFlow();                  // air hilang = turun tandon - debit pipa (jendela sama)
-  if (leakLpm > LEAK_THRESHOLD_LPM) {
+  if (aiCuriga(leakLpm)) {                        // keputusan AI: CURIGA
     if (!leakStart) leakStart = now;
     lastLeakSeen = now;
     wastedL += leakLpm / 60.0f;                   // estimasi air terbuang
   } else if (leakStart && now - lastLeakSeen > GRACE_MS) {
-    leakStart = 0;                                // selisih hilang cukup lama -> batal
+    leakStart = 0;                                // CURIGA hilang cukup lama -> batal
   }
 
   if (!leakStart) status = "AMAN";
